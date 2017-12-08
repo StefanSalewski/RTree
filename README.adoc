@@ -1,0 +1,7 @@
+== RTree
+
+This is the first draft of a generic RTree for Nim.
+
+RTrees are a dynamic index structure for spatial searching.
+
+http://www-db.deis.unibo.it/courses/SI-LS/papers/Gut84.pdf
