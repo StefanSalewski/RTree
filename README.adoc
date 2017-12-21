@@ -5,3 +5,11 @@ This is the first draft of a generic RTree for Nim.
 RTrees are a dynamic index structure for spatial searching.
 
 http://www-db.deis.unibo.it/courses/SI-LS/papers/Gut84.pdf
+
+https://en.wikipedia.org/wiki/R-tree
+
+This implementation follows closely the Guttman paper. Currently only basic procs insert, delete and search are
+available. A simple test is included, but I am not currently using this module myself, so it is not really tested yet.
+
+Of course the R*Tree variant of this algorithm is more powerfull (faster). I may provide that later. And I may add
+bulk-loading and nearest-neighbour-search, maybe also more search variants.
