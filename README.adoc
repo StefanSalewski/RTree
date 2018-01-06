@@ -1,15 +1,25 @@
-== RTree
+== Pure Nim generic RTree and R*Tree
 
-This is the first draft of a generic RTree for Nim.
-
-RTrees are a dynamic index structure for spatial searching.
+RTrees are a dynamic index structures for spatial indexing/searching.
 
 http://www-db.deis.unibo.it/courses/SI-LS/papers/Gut84.pdf
 
+http://dbs.mathematik.uni-marburg.de/publications/myPapers/1990/BKSS90.pdf
+
 https://en.wikipedia.org/wiki/R-tree
 
-This implementation follows closely the Guttman paper. Currently only basic procs insert, delete and search are
-available. A simple test is included, but I am not currently using this module myself, so it is not really tested yet.
+This implementation follows closely the Guttman paper for plain RTree and the other mentioned paper
+for the R*Tree variant.
 
-Of course the R*Tree variant of this algorithm is more powerfull (faster). I may provide that later. And I may add
-bulk-loading and nearest-neighbour-search, maybe also more search variants.
+Currently only basic procs insert(), delete() and search() are
+available. A simple test is included, but I am not currently using this module myself, so it is not really tested yet.
+I have tested the algorithm only for 2D with integer data objects yet, but it should work for arbitrary dimensions
+and data objects.
+
+You call newRTree() for the plain tree or newRStarTree() for the Star variant. The later should be faster for
+large data sets and it should work well for plain 1D point data.
+
+Later I may add a more detailed documentation and procs for range-search and bulk-loading. For now
+you can consult the test() proc at the end of the source code to learn how to use the procs.
+
+
