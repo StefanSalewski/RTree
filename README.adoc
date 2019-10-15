@@ -1,25 +1,186 @@
-== Pure Nim generic RTree and R*Tree
+= R-Trees
+(c) Stefan Salewski                                     
+:experimental:
+:imagesdir: http://ssalewski.de/tmp
+:source-highlighter: pygments
+:pygments-style: monokai
+:icons: font
+:toc: left
 
-RTrees are a dynamic index structures for spatial indexing/searching.
+== Pure Nim generic R-Tree and R*-Tree
 
-http://www-db.deis.unibo.it/courses/SI-LS/papers/Gut84.pdf
+R-Trees are dynamic tree data structures for spatial indexing/searching.
 
-http://dbs.mathematik.uni-marburg.de/publications/myPapers/1990/BKSS90.pdf
+image::NimRTree.png[]
 
-https://en.wikipedia.org/wiki/R-tree
+Typical objects to locate are rectangles, polygons, circles or other arbitrary shapes.
 
-This implementation follows closely the Guttman paper for plain RTree and the other mentioned paper
-for the R*Tree variant.
+While used mostly to locate objects in two-dimensional space, this module supports
+arbitrary dimensions with coordinates types including int and float.
 
-Currently only basic procs insert(), delete() and search() are
-available. A simple test is included, but I am not currently using this module myself, so it is not really tested yet.
-I have tested the algorithm only for 2D with integer data objects yet, but it should work for arbitrary dimensions
-and data objects.
+Incremental insertion and deletion of objects is supported, as well as range search
+(objects overlapping with a query box) and incremental nearest neighbor search. Additional
+bulk loading of an initial set of objects is supported, giving shorter tree construction times,
+lower memory consumption and faster access times. Bulk loaded trees remain fully dynamic. The
+basic R-Tree as well as the improved R*-Tree is supported.
 
-You call newRTree() for the plain tree or newRStarTree() for the Star variant. The later should be faster for
-large data sets and it should work well for plain 1D point data.
+Locating objects works with bounding boxes, rectangles in 2D. Each element has a bounding box,
+and for searching we specify a query box. The boxes are an array of `Ext[RT] = tuple[a, b: RT]`,
+with an array element for each dimension, and `Ext` is a tuple of a range type RT like int or float.
+For the range itself it is important that `a <= b`.
 
-Later I may add a more detailed documentation and procs for range-search and bulk-loading. For now
-you can consult the test() proc at the end of the source code to learn how to use the procs.
+The search() proc returns all objects overlapping (partly) with a query box. Maybe later we can add
+one more proc which returns only objects which are fully contained in the query box. (That is very easy --
+the difficult part is finding good names for additional procs.)
 
+The nearest() procs and iterators gets not a box, but a point called BoxCenter as parameter
+and return elements nearest to the query point.
+
+We can use a plain R-Tree or the advanced R*-Tree to store our objects. Most of the time
+we will use the R*-Tree, because it's optimized splitting algorithm should give
+better performance. First generic parameter of new() proc is the maximal number
+of childs per node. 8 is a common value, 2 is min for plain R-Tree, 4 is min for
+R*-Tree. Maximal number of children is 100, but it is not really limited. Next
+three generic parameters are dimension >= 1, coordinates type and object type.
+Additional you can pass the minimal fill factor, which is a percent value between
+30 and 50. All these parameters can have an effect on performance and memory consumption,
+but general the effects are small. The bulk loading procs gets a seq containing the
+data objects as a parameter. Generally bulk loading is faster than single inserts and
+should give an optimized tree -- optimized for performance and memory consumption.
+Bulk loaded trees are also fully dynamic, you can later insert() and delete() elements.
+Bulk loading should have advantages if elements are available early, and when the
+tree is mostly static. Inserting new elements into a bulk loaded tree may be not
+extremely fast, because nodes of bulk loaded trees are totally filled, so later inserts()
+leads to splits, which takes some time. So for very dynamic data bulk loading may not
+be really the best solution.
+
+For nearest neighbor search we have a plain proc which returns a single element nearest
+to a query point, and an iterator which can return multiple elements. Both proc and
+iterator are available in a simple version which takes into account only the bounding
+boxes of the objects, and a version which takes a dist() proc as additional parameter.
+The dist() proc can estimate the distance more accurate, but may be slower.
+
+NOTE: The dist() proc has to return the SQUARED distance from object to query point,
+and this distance value has always to be not negative and not greater than the squared distance from
+the query point to the bounding box of the object. The later condition is true for
+each meaningful dist() function, the relation allows pruning of objects first by
+plain bounding box checks, resulting in improved performance. The squared distance is
+used because this can avoid sqrt() calculations in many cases -- for the circle dist()
+function this is not true.
+
+Most procs for insertion, deletion and location of objects accepts a tuple consisting
+of the bounding box and the object itself as parameter or return this tuple type.
+This type `L[D; RT; LT] = tuple[b: Box[D, RT], l: LT]` is sometimes called record.
+And exception is the proc searchObj() which returns only the object itself, not the box.
+This is to save costly seq operations when only the objects itself are requested.
+
+=== API
+
+http://ssalewski.de/tmp/rtree.html
+
+The API may change in later versions of this software!
+
+=== Install
+
+----
+nimble install rtree
+----
+
+=== Examples
+
+To give an not too trivial example, we will use some circles in 2D with float coordinates.
+We will define a proc box() for our circles, which gives us the bounding
+rectangle, and a proc dist() which gives the distance of a circle from a query point.
+
+[[test.nim]]
+[source,nim]
+.test.nim
+----
+# nim c test.nim
+import rtree
+from math import sqrt, `^`
+
+type
+  Circ = object
+    x, y, r: float
+
+# squared distance from query point to circle
+proc dist(qo: BoxCenter[2, float]; l: L[2, float, Circ]): float =
+  let c = l.l
+  max(0, math.sqrt((qo[0] - c.x) ^ 2 + (qo[1] - c.y) ^ 2) - c.r) ^ 2
+
+# bounding box of circle
+proc box(c: Circ): Box[2, float] =
+  result[0].a = c.x - c.r
+  result[0].b = c.x + c.r
+  result[1].a = c.y - c.r
+  result[1].b = c.y + c.r
+
+proc test =
+  const P = [(9, 3, 2), (-2, 2, 1), (-5, -3, 2), (4, -2, 1)]
+  var s: seq[L[2, float, Circ]] # buffer for bulk load
+  var t = newRStarTree[8, 2, float, Circ]()
+  var el: L[2, float, Circ]
+  for p in P:
+    let c = Circ(x: p[0].float, y: p[1].float, r: p[2].float)
+    el = (box(c), c)
+    s.add(el)
+    t.insert(el)
+  echo "circ in first quadrant:"
+  echo t.search([(0.0, 12.0), (0.0, 12.0)])
+  echo "circs below x axis"
+  echo t.search([(-20.0, 20.0), (-12.0, 0.0)])
+  echo "empty area"
+  echo t.search([(0.0, 5.0), (0.0, 5.0)])
+
+  echo "search a single circle located closest to origin using only bounding boxes"
+  echo t.findNearestBox(BoxCenter[2, float]([0.0, 0.0]))
+  echo "query circles sorted along x-axis, using only bounding boxes"
+  for el in t.findNearestBox(BoxCenter[2, float]([-100.0, 0.0])): # sort along x axis
+    echo el.l
+
+  echo "search a single circle located closest to origin using exact dist() function"
+  echo t.findNearest(BoxCenter[2, float]([0.0, 0.0]), dist)
+  echo "query circles sorted along x-axis, using dist() function"
+  for el in t.findNearest(BoxCenter[2, float]([-100.0, 0.0]), dist):
+    echo el.l
+
+  # and we can delete objects:
+  assert(t.delete(s[0]))
+  assert(not t.delete(s[0])) # that object was already deleted
+
+  var bt = newRStarTree[8, 2, float, Circ](s) # a bulk loaded R-Tree, should work like t
+  echo "done!"
+
+test()
+----
+
+=== Testing
+
+The rtee.nim module contains testing code, which is executed when you compile and run
+it directly as main module. When you compile with option `-d:cairoGTK` a GUI window
+is opened showing the tree of rectangles. For the later you have to install gintro
+to enable cairo and GTK support. All testing has been done only for 2D yet -- bugs
+for other dimensions should be easy to fix when they exist.
+
+=== Performance
+
+All the used algorithm where described in detail in the papers listed below and implemented in
+Nim language, so performance is expected to be good and state of the art. The module is currently used
+most of the time only with a few thousand objects, for example to locate objects on a 2D canvas.
+For this usecase performance is more than sufficient. When you intent to use the module for
+very large data sets, then we recommend that you do some benchmarking and profiling yourself. You may compare
+plain R-Tree to R*-Tree, test impact of bulk loading, and test various number of child nodes and
+fill factor. A simple way to improve performance may be to mark some of the smaller procs with
+{.inline.} pragma -- this should be not necessary when you compile your app with -flto option to
+enable link-time-optimization.
+
+=== References
+
+* https://en.wikipedia.org/wiki/R-tree[Wikipedia R-Tree]
+* http://www-db.deis.unibo.it/courses/SI-LS/papers/Gut84.pdf[original R-Tree by Guttman]
+* http://dbs.mathematik.uni-marburg.de/publications/myPapers/1990/BKSS90.pdf[improved R*-Tree]
+* http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.386.8193&rep=rep1&type=pdf[incremental k nearest neighbor search]
+* http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.20.9245&rep=rep1&type=pdf[sketch of TGS bulk loading] 
+* http://www.cs.umd.edu/~hjs/pubs/AlborziIPL07.pdf[detailed algorithm of TGS bulk loading]
 
