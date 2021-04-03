@@ -2,6 +2,7 @@
 # (c) S. Salewski 2018
 # 2018-JAN-06 -- initial release
 # 2019-OCT-14 -- added nearest neighbor search and TGS bulk loading
+# 2021-JAN-08 -- added items() iterator
 
 # http://www-db.deis.unibo.it/courses/SI-LS/papers/Gut84.pdf # original R-Tree by Guttman
 # http://dbs.mathematik.uni-marburg.de/publications/myPapers/1990/BKSS90.pdf # improved R*-Tree
@@ -28,6 +29,7 @@ type
   H[M, D: Dim; RT, LT] = ref object of RTRef[RT]
     parent: H[M, D, RT, LT]
     numEntries: int
+    cur: int # for iteration
     level: int
   N[M, D: Dim; RT, LT] = tuple[b: Box[D, RT]; n: H[M, D, RT, LT]]
   LA[M, D: Dim; RT, LT] = array[M, L[D, RT, LT]]
@@ -1036,6 +1038,48 @@ iterator findNearest*[M, D: Dim; RT, LT](t: RTree[M, D, RT, LT]; queryObject: Bo
         if i == Node[M, D, RT, LT](el).numEntries: break
         o.n.pri = dist(queryObject, (o).b)
         queue.push(o.n)
+    else: assert false
+
+iterator items*[M, D: Dim; RT, LT](t: RTree[M, D, RT, LT]): L[D, RT, LT] =
+  var el: H[M, D, RT, LT] = t.root
+  assert el.parent == nil
+  el.cur = 0
+  while el != nil:
+    if el of Leaf[M, D, RT, LT]:
+      for i, o in Leaf[M, D, RT, LT](el).a:
+        if i == Leaf[M, D, RT, LT](el).numEntries: break
+        yield o
+      el = el.parent
+    elif el of Node[M, D, RT, LT]:
+      if el.cur < el.numEntries:
+        let h = el
+        el = Node[M, D, RT, LT](el).a[el.cur].n
+        assert el.parent == h
+        el.cur = 0
+        h.cur += 1
+      else:
+        el = el.parent
+    else: assert false
+
+iterator elements*[M, D: Dim; RT, LT](t: RTree[M, D, RT, LT]): LT =
+  var el: H[M, D, RT, LT] = t.root
+  assert el.parent == nil
+  el.cur = 0
+  while el != nil:
+    if el of Leaf[M, D, RT, LT]:
+      for i, o in Leaf[M, D, RT, LT](el).a:
+        if i == Leaf[M, D, RT, LT](el).numEntries: break
+        yield o.l
+      el = el.parent
+    elif el of Node[M, D, RT, LT]:
+      if el.cur < el.numEntries:
+        let h = el
+        el = Node[M, D, RT, LT](el).a[el.cur].n
+        assert el.parent == h
+        el.cur = 0
+        h.cur += 1
+      else:
+        el = el.parent
     else: assert false
 
 # testing findNearest() with a custom object, instead plain rectangle
